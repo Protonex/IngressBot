@@ -5,6 +5,8 @@ import lxml.html
 import requests
 from StringIO import StringIO
 
+MAX_AUTH_RETRIES = 1
+
 HANDSHAKE_PARAMS = {
   "nemesisSoftwareVersion" : "2013-06-07T16:49:41Z 63e36378f5e8 opt", 
   "deviceSoftwareVersion" : "4.1.1"
@@ -48,10 +50,13 @@ HEADERS = {
 }
 
 class Api(object):
+
   def __init__(self, email, password):
+    self.userEmail = email
+    self.userPassword = password
     self.headers = copy.deepcopy(HEADERS)
-    self.authApi(email, password)
-    self.authIntel(email, password)
+    self.authApi(self.userEmail, self.userPassword)
+    self.authIntel(self.userEmail, self.userPassword)
     self.logger = logging.getLogger("ingressbot")
       
   def authApi(self, email, password):
@@ -155,15 +160,36 @@ class Api(object):
       raise RuntimeError("Authentication failed: Unknown reason")
     self.cookiesIntel = request.cookies
   
+  def _apiWrap(self, func, **kwargs):
+    response = func(**kwargs)
+    if response.status_code == 200:
+      try:
+        return json.loads(response.content.replace("while(1);", ""))
+      except:
+        self.logger.critical("headers: " + str(response.headers))
+        self.logger.critical("content: " + str(response.content))
+        raise
+    elif response.status_code == 401:
+      if("authRetry" in kwargs and kwargs["authRetry"] >= MAX_AUTH_RETRIES):
+        self.logger.critical("headers: " + str(response.headers))
+        self.logger.critical("content: " + str(response.content))
+        raise RuntimeError("Re-Authentication failed")
+      else:
+        self.logger.critical("RE-AUTHENTICATION")
+        self.authApi(self.userEmail, self.userPassword)
+        return self._apiWrap(func, kwargs, authRetry=authRetry+1)
+    elif response.status_code == 500:
+      return dict()
+
+  def _getInventory(self, lastQueryTimestamp):
+    return requests.post(
+      URLS["GAME_API"] + PATHS["API"]["INVENTORY"],
+      cookies=self.cookiesApi, allow_redirects=False, headers=self.headers["API"], 
+      data=json.dumps({"params" : {"lastQueryTimestamp": lastQueryTimestamp}})
+    )
+
   def getInventory(self, lastQueryTimestamp):
-    request = requests.post(URLS["GAME_API"] + PATHS["API"]["INVENTORY"], allow_redirects=False, headers=self.headers["API"], data=json.dumps({"params" : {"lastQueryTimestamp": lastQueryTimestamp}}), cookies=self.cookiesApi)
-    try:
-      return json.loads(request.content.replace("while(1);", ""))
-    except:
-      self.logger.critical("status: " + str(request.status_code))
-      self.logger.critical("headers: " + str(request.headers))
-      self.logger.critical("content: " + str(request.content))
-      raise
+    return self._apiWrap(self._getInventory, lastQueryTimestamp=lastQueryTimestamp)
     
   def getMessages(self, bounds, minTimestamp, maxTimestamp, maxItems, factionOnly):
     payload = {
@@ -177,12 +203,11 @@ class Api(object):
       "maxTimestampMs" : maxTimestamp,
       "method" : "dashboard.getPaginatedPlextsV2"
     }
-    request = requests.post(URLS["INGRESS"] + PATHS["INTEL"]["PLEXTS"], allow_redirects=False, cookies=self.cookiesIntel, headers=self.headers["INTEL"], data = json.dumps(payload))
+    response = requests.post(URLS["INGRESS"] + PATHS["INTEL"]["PLEXTS"], allow_redirects=False, cookies=self.cookiesIntel, headers=self.headers["INTEL"], data = json.dumps(payload))
     try:
-      return json.loads(request.content)
+      return json.loads(response.content)
     except:
-      self.logger.critical(request.content)
+      self.logger.critical("status: " + str(response.status_code))
+      self.logger.critical("headers: " + str(response.headers))
+      self.logger.critical("content: " + str(response.content))
       raise
-    
-  def say(self, msg, factionOnly=True):
-    requests.post(URLS["GAME_API"] + PATHS["API"]["SAY"], allow_redirects=False, headers=self.headers["API"], data=json.dumps({"params" : {"factionOnly": factionOnly, "message" : msg}}), cookies=self.cookiesApi)
