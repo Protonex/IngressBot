@@ -160,7 +160,7 @@ class Api(object):
       raise RuntimeError("Authentication failed: Unknown reason")
     self.cookiesIntel = request.cookies
   
-  def _apiWrap(self, func, **kwargs):
+  def _apiWrap(self, func, authRetry=0, **kwargs):
     response = func(**kwargs)
     if response.status_code == 200:
       try:
@@ -170,14 +170,14 @@ class Api(object):
         self.logger.critical("content: " + str(response.content))
         raise
     elif response.status_code == 401:
-      if("authRetry" in kwargs and kwargs["authRetry"] >= MAX_AUTH_RETRIES):
+      if(authRetry >= MAX_AUTH_RETRIES):
         self.logger.critical("headers: " + str(response.headers))
         self.logger.critical("content: " + str(response.content))
         raise RuntimeError("Re-Authentication failed")
       else:
         self.logger.critical("RE-AUTHENTICATION")
         self.authApi(self.userEmail, self.userPassword)
-        return self._apiWrap(func, kwargs, authRetry=authRetry+1)
+        return self._apiWrap(func, authRetry=authRetry+1, **kwargs)
     elif response.status_code == 500:
       return dict()
 
