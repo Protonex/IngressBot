@@ -1,0 +1,4 @@
+{
+  "ingress" : {"userEmail" : "username@gmail.com", "userPassword" : "should_be_clear"},
+  "jabber"  : {"user" : "username@mail.com", "password" : "should_be_clear"}
+}
