@@ -271,6 +271,7 @@ class Ingressbot(JabberBot):
     line = "Flipcards:\t\t"
     for i in self.inventory.flipCards.itervalues():
       line += str(len(i)) + " "
+    lines.append(line)
     
     line = "ForceAmps:\t\t"
     for i in self.inventory.forceAmps.itervalues():
