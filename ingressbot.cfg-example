@@ -1,0 +1,7 @@
+{
+  "master" : "yourhangoutaccount@googlemail.com",
+  "chatLookbackHours" : 6,
+  "bounds" : {
+    "minLatE6" : 51396800, "maxLatE6" : 51542229, "minLngE6" : 11767453, "maxLngE6" : 12179440
+  }
+}
